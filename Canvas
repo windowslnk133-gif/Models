@@ -1,0 +1,914 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Ze Canvas Studio - ZE Engine Visual Drawer & Layer Manager</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+  <style>
+    /* 現代深色風格自訂樣式 */
+    body {
+      background-color: #0d1117;
+      color: #c9d1d9;
+      font-family: 'Segoe UI', system-ui, -apple-system, sans-serif;
+      overflow: hidden;
+    }
+    /* 網格背景畫布 */
+    #canvas-container {
+      background-color: #161b22;
+      background-image: radial-gradient(#30363d 1px, transparent 1px);
+      background-size: 20px 20px;
+    }
+    /* 自訂捲軸 */
+    ::-webkit-scrollbar {
+      width: 6px;
+      height: 6px;
+    }
+    ::-webkit-scrollbar-track {
+      background: #161b22;
+    }
+    ::-webkit-scrollbar-thumb {
+      background: #30363d;
+      border-radius: 3px;
+    }
+    ::-webkit-scrollbar-thumb:hover {
+      background: #484f58;
+    }
+    /* 折疊動畫 */
+    .collapsible-sidebar {
+      transition: transform 0.3s cubic-bezier(0.4, 0, 0.2, 1), opacity 0.3s ease;
+    }
+    .collapsed {
+      transform: translateX(-100%);
+      opacity: 0;
+      pointer-events: none;
+    }
+    @media (max-width: 768px) {
+      .collapsible-sidebar.collapsed {
+        transform: translateY(-100%);
+      }
+    }
+    /* 層級項目拖拽風格 */
+    .layer-item.selected {
+      border-color: #6366f1;
+      background-color: rgba(99, 102, 241, 0.15);
+    }
+  </style>
+</head>
+<body class="h-screen w-screen flex flex-col md:flex-row overflow-hidden select-none">
+
+  <!-- 頂部/側邊 可折疊主選單 -->
+  <aside id="sidebar" class="collapsible-sidebar z-20 w-full md:w-80 bg-slate-900/95 backdrop-blur border-b md:border-b-0 md:border-r border-slate-800 flex flex-col h-auto md:h-full shrink-0 shadow-2xl absolute md:relative left-0 top-0 max-h-[85vh] md:max-h-full overflow-y-auto">
+    <!-- Header -->
+    <div class="p-4 border-b border-slate-800 flex items-center justify-between bg-slate-950/50">
+      <div class="flex items-center space-x-2">
+        <div class="w-8 h-8 rounded-lg bg-indigo-600 flex items-center justify-center font-bold text-white shadow-lg shadow-indigo-500/30">
+          Ze
+        </div>
+        <div>
+          <h1 class="font-bold text-slate-100 text-sm leading-tight">Ze Canvas Studio</h1>
+          <p class="text-xs text-slate-400">視覺化繪圖與層級管理系統</p>
+        </div>
+      </div>
+      <button id="close-sidebar-btn" class="text-slate-400 hover:text-slate-200 p-1.5 rounded-lg hover:bg-slate-800 transition">
+        <i class="fa-solid fa-xmark text-lg"></i>
+      </button>
+    </div>
+
+    <!-- 模式選擇 -->
+    <div class="p-4 border-b border-slate-800 space-y-2">
+      <label class="text-xs font-semibold text-slate-400 uppercase tracking-wider block">互動模式</label>
+      <div class="grid grid-cols-3 gap-2">
+        <button id="mode-draw" class="mode-btn flex flex-col items-center justify-center p-2.5 rounded-xl border border-indigo-500/50 bg-indigo-600/20 text-indigo-300 font-medium text-xs transition hover:bg-indigo-600/30">
+          <i class="fa-solid fa-pen-nib text-base mb-1"></i>
+          <span>🖌️ 繪畫</span>
+        </button>
+        <button id="mode-select" class="mode-btn flex flex-col items-center justify-center p-2.5 rounded-xl border border-slate-800 bg-slate-800/40 text-slate-400 font-medium text-xs transition hover:bg-slate-800">
+          <i class="fa-solid fa-arrow-pointer text-base mb-1"></i>
+          <span>↖️ 拖拽/調整</span>
+        </button>
+        <button id="mode-recolor" class="mode-btn flex flex-col items-center justify-center p-2.5 rounded-xl border border-slate-800 bg-slate-800/40 text-slate-400 font-medium text-xs transition hover:bg-slate-800">
+          <i class="fa-solid fa-fill-drip text-base mb-1"></i>
+          <span>🖍️ 調色</span>
+        </button>
+      </div>
+    </div>
+
+    <!-- 圖形選擇區塊 -->
+    <div class="p-4 border-b border-slate-800 space-y-3">
+      <label class="text-xs font-semibold text-slate-400 uppercase tracking-wider block">圖形選擇</label>
+      <div class="grid grid-cols-2 gap-2">
+        <button id="shape-circle" class="shape-btn flex items-center space-x-2 p-2 rounded-lg bg-indigo-600 text-white border border-indigo-400/30 text-xs transition">
+          <i class="fa-regular fa-circle text-sm"></i>
+          <span>Circle (圓形)</span>
+        </button>
+        <button id="shape-rectangle" class="shape-btn flex items-center space-x-2 p-2 rounded-lg bg-slate-800 text-slate-300 border border-slate-700 text-xs hover:bg-slate-700 transition">
+          <i class="fa-regular fa-square text-sm"></i>
+          <span>Rectangle (矩形)</span>
+        </button>
+        <button id="shape-square" class="shape-btn flex items-center space-x-2 p-2 rounded-lg bg-slate-800 text-slate-300 border border-slate-700 text-xs hover:bg-slate-700 transition">
+          <i class="fa-solid fa-square text-sm"></i>
+          <span>Square (正方形)</span>
+        </button>
+        <button id="shape-triangle" class="shape-btn flex items-center space-x-2 p-2 rounded-lg bg-slate-800 text-slate-300 border border-slate-700 text-xs hover:bg-slate-700 transition">
+          <i class="fa-solid fa-play -rotate-90 text-sm"></i>
+          <span>Triangle (三角形)</span>
+        </button>
+      </div>
+    </div>
+
+    <!-- 色彩設定 -->
+    <div class="p-4 border-b border-slate-800 space-y-3">
+      <label class="text-xs font-semibold text-slate-400 uppercase tracking-wider block">色彩調色盤</label>
+      <div class="flex items-center space-x-3">
+        <input type="color" id="color-picker" value="#00FF88" class="w-10 h-10 rounded-lg cursor-pointer bg-transparent border-0 p-0">
+        <span id="color-hex" class="font-mono text-sm text-slate-200 uppercase bg-slate-800 px-2.5 py-1 rounded border border-slate-700">#00FF88</span>
+      </div>
+      <!-- 快選色塊 -->
+      <div class="flex items-center gap-1.5 flex-wrap pt-1">
+        <button class="preset-color w-6 h-6 rounded-full border border-white/20" style="background-color: #FF0000;" data-color="#FF0000"></button>
+        <button class="preset-color w-6 h-6 rounded-full border border-white/20" style="background-color: #00FF88;" data-color="#00FF88"></button>
+        <button class="preset-color w-6 h-6 rounded-full border border-white/20" style="background-color: #00E5FF;" data-color="#00E5FF"></button>
+        <button class="preset-color w-6 h-6 rounded-full border border-white/20" style="background-color: #FFB703;" data-color="#FFB703"></button>
+        <button class="preset-color w-6 h-6 rounded-full border border-white/20" style="background-color: #FF007F;" data-color="#FF007F"></button>
+        <button class="preset-color w-6 h-6 rounded-full border border-white/20" style="background-color: #9D4EDD;" data-color="#9D4EDD"></button>
+        <button class="preset-color w-6 h-6 rounded-full border border-white/20" style="background-color: #FFFFFF;" data-color="#FFFFFF"></button>
+      </div>
+    </div>
+
+    <!-- 層級管理 (Layer Management / Z-Index) -->
+    <div class="p-4 border-b border-slate-800 space-y-3">
+      <div class="flex items-center justify-between">
+        <label class="text-xs font-semibold text-slate-400 uppercase tracking-wider block">層級管理 (Z-Index)</label>
+        <span class="text-[10px] text-slate-500">頂層於下方渲染</span>
+      </div>
+      <div class="grid grid-cols-4 gap-1.5">
+        <button id="layer-front" title="移至頂層" disabled class="layer-control-btn p-2 bg-slate-800 hover:bg-slate-700 text-slate-300 border border-slate-700 rounded-lg text-xs flex justify-center items-center transition disabled:opacity-40 disabled:cursor-not-allowed">
+          <i class="fa-solid fa-angles-up"></i>
+        </button>
+        <button id="layer-up" title="上移一層" disabled class="layer-control-btn p-2 bg-slate-800 hover:bg-slate-700 text-slate-300 border border-slate-700 rounded-lg text-xs flex justify-center items-center transition disabled:opacity-40 disabled:cursor-not-allowed">
+          <i class="fa-solid fa-angle-up"></i>
+        </button>
+        <button id="layer-down" title="下移一層" disabled class="layer-control-btn p-2 bg-slate-800 hover:bg-slate-700 text-slate-300 border border-slate-700 rounded-lg text-xs flex justify-center items-center transition disabled:opacity-40 disabled:cursor-not-allowed">
+          <i class="fa-solid fa-angle-down"></i>
+        </button>
+        <button id="layer-back" title="移至底層" disabled class="layer-control-btn p-2 bg-slate-800 hover:bg-slate-700 text-slate-300 border border-slate-700 rounded-lg text-xs flex justify-center items-center transition disabled:opacity-40 disabled:cursor-not-allowed">
+          <i class="fa-solid fa-angles-down"></i>
+        </button>
+      </div>
+      <!-- 圖層列表 -->
+      <div id="layer-list" class="max-h-36 overflow-y-auto space-y-1 pr-1 text-xs">
+        <!-- 動態渲染層級項目 -->
+      </div>
+    </div>
+
+    <!-- 參數與屬性 -->
+    <div class="p-4 border-b border-slate-800 space-y-3">
+      <label class="text-xs font-semibold text-slate-400 uppercase tracking-wider block">引擎與屬性設定</label>
+      <div class="flex items-center justify-between text-xs">
+        <span class="text-slate-300">幀率限制 (timeloop):</span>
+        <div class="flex items-center space-x-1">
+          <input type="number" id="fps-input" value="60" min="1" max="240" class="w-16 bg-slate-800 border border-slate-700 rounded px-2 py-1 text-right text-slate-100 focus:outline-none focus:border-indigo-500">
+          <span class="text-slate-500">FPS</span>
+        </div>
+      </div>
+
+      <!-- 選取圖形動態屬性 -->
+      <div id="selection-properties" class="hidden bg-slate-950/60 p-3 rounded-lg border border-slate-800 space-y-2 text-xs">
+        <div class="text-indigo-400 font-semibold mb-1 border-b border-slate-800 pb-1 flex justify-between items-center">
+          <span>選取圖形參數</span>
+          <span id="selected-type-tag" class="text-[10px] bg-indigo-900/60 text-indigo-300 px-1.5 py-0.5 rounded">Rectangle</span>
+        </div>
+        <div class="grid grid-cols-2 gap-2">
+          <div>
+            <span class="text-slate-400 block">大小 [W, H]:</span>
+            <span id="prop-size" class="font-mono text-slate-200">[80, 40]</span>
+          </div>
+          <div>
+            <span class="text-slate-400 block">位置 [X, Y]:</span>
+            <span id="prop-pos" class="font-mono text-slate-200">[400, 300]</span>
+          </div>
+          <div>
+            <span class="text-slate-400 block">角度 [Angle]:</span>
+            <span id="prop-angle" class="font-mono text-slate-200">[0]</span>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- 操作按鈕 -->
+    <div class="p-4 space-y-2 mt-auto">
+      <button id="delete-btn" disabled class="w-full py-2 px-3 bg-rose-900/30 hover:bg-rose-900/50 text-rose-300 border border-rose-800/50 rounded-lg text-xs font-medium transition flex items-center justify-center space-x-2 disabled:opacity-40 disabled:cursor-not-allowed">
+        <i class="fa-solid fa-trash-can"></i>
+        <span>刪除選取圖形</span>
+      </button>
+      <button id="clear-btn" class="w-full py-2 px-3 bg-slate-800 hover:bg-slate-700 text-slate-300 border border-slate-700 rounded-lg text-xs font-medium transition flex items-center justify-center space-x-2">
+        <i class="fa-solid fa-rotate-right"></i>
+        <span>清空畫布</span>
+      </button>
+    </div>
+  </aside>
+
+  <!-- 右側/下方 主畫布區塊 -->
+  <main class="flex-1 relative flex flex-col h-full overflow-hidden">
+    
+    <!-- 頂部浮動選單觸發鈕與快捷工具欄 -->
+    <div class="absolute top-4 left-4 z-10 flex items-center space-x-2">
+      <button id="toggle-sidebar-btn" class="bg-slate-900/90 hover:bg-slate-800 text-slate-200 border border-slate-700 px-3 py-2 rounded-xl shadow-xl backdrop-blur flex items-center space-x-2 text-xs font-semibold transition">
+        <i class="fa-solid fa-bars text-sm"></i>
+        <span>選單 ☰</span>
+      </button>
+
+      <!-- 畫布快捷指示器 -->
+      <div id="status-indicator" class="bg-slate-900/80 border border-slate-800 px-3 py-2 rounded-xl backdrop-blur text-xs text-slate-400 hidden sm:flex items-center space-x-2">
+        <span class="w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></span>
+        <span id="status-text">模式：🖌️ 繪畫</span>
+      </div>
+    </div>
+
+    <!-- 右上角 Ze Code 彈出按鈕 -->
+    <div class="absolute top-4 right-4 z-10 flex items-center space-x-2">
+      <button id="copy-code-btn" class="bg-indigo-600 hover:bg-indigo-500 text-white border border-indigo-400/30 px-3.5 py-2 rounded-xl shadow-xl backdrop-blur flex items-center space-x-2 text-xs font-semibold transition">
+        <i class="fa-regular fa-copy"></i>
+        <span>複製 Ze 程式碼</span>
+      </button>
+      <button id="toggle-code-panel-btn" class="bg-slate-900/90 hover:bg-slate-800 text-slate-200 border border-slate-700 p-2 rounded-xl shadow-xl backdrop-blur text-xs transition">
+        <i class="fa-solid fa-code"></i>
+      </button>
+    </div>
+
+    <!-- 畫布區域 -->
+    <div id="canvas-container" class="flex-1 w-full h-full relative overflow-hidden cursor-crosshair">
+      <canvas id="main-canvas" class="absolute left-0 top-0 w-full h-full"></canvas>
+    </div>
+
+    <!-- 底部 Ze Code 預覽面板 (可伸縮) -->
+    <div id="code-panel" class="h-44 bg-slate-950 border-t border-slate-800 flex flex-col transition-all duration-300">
+      <div class="px-4 py-1.5 bg-slate-900/80 border-b border-slate-800 flex items-center justify-between text-xs text-slate-400">
+        <div class="flex items-center space-x-2">
+          <i class="fa-solid fa-terminal text-indigo-400"></i>
+          <span class="font-mono font-medium">Ze Engine Output Code</span>
+        </div>
+        <div class="flex items-center space-x-2">
+          <button id="minimize-code-btn" class="hover:text-slate-200 p-1">
+            <i class="fa-solid fa-chevron-down"></i>
+          </button>
+        </div>
+      </div>
+      <pre class="flex-1 p-4 overflow-y-auto font-mono text-xs text-emerald-400 bg-slate-950/90 leading-relaxed"><code id="code-output"></code></pre>
+    </div>
+  </main>
+
+  <!-- 提示訊息 Toast -->
+  <div id="toast" class="fixed bottom-6 right-6 bg-indigo-600 text-white text-xs font-medium px-4 py-2.5 rounded-xl shadow-2xl opacity-0 pointer-events-none transition-all duration-300 z-50 flex items-center space-x-2">
+    <i class="fa-solid fa-circle-check"></i>
+    <span id="toast-msg">已成功複製程式碼！</span>
+  </div>
+
+  <script>
+    /**
+     * Ze Canvas Visual Drawer & Layer Engine
+     */
+
+    // --- State Management ---
+    const state = {
+      mode: 'draw', // 'draw', 'select', 'recolor'
+      selectedShapeType: 'Circle', // 'Circle', 'Rectangle', 'Square', 'Triangle'
+      currentColor: '#00FF88',
+      fps: 60,
+      shapes: [], // List of all drawn shapes ordered by Z-index (0 is bottom)
+      selectedIndex: -1,
+      isDragging: false,
+      isRotating: false,
+      isResizing: false,
+      resizeHandleIndex: -1,
+      dragOffsetX: 0,
+      dragOffsetY: 0,
+      startAngle: 0,
+      initialShapeState: null
+    };
+
+    // --- Canvas & UI DOM Elements ---
+    const canvas = document.getElementById('main-canvas');
+    const ctx = canvas.getContext('2d');
+    const container = document.getElementById('canvas-container');
+    const sidebar = document.getElementById('sidebar');
+    const toggleSidebarBtn = document.getElementById('toggle-sidebar-btn');
+    const closeSidebarBtn = document.getElementById('close-sidebar-btn');
+    const colorPicker = document.getElementById('color-picker');
+    const colorHex = document.getElementById('color-hex');
+    const fpsInput = document.getElementById('fps-input');
+    const codeOutput = document.getElementById('code-output');
+    const toast = document.getElementById('toast');
+    const toastMsg = document.getElementById('toast-msg');
+    const deleteBtn = document.getElementById('delete-btn');
+    const selectionProperties = document.getElementById('selection-properties');
+    const statusText = document.getElementById('status-text');
+    const codePanel = document.getElementById('code-panel');
+    const minimizeCodeBtn = document.getElementById('minimize-code-btn');
+    const layerList = document.getElementById('layer-list');
+    const layerBtns = {
+      front: document.getElementById('layer-front'),
+      up: document.getElementById('layer-up'),
+      down: document.getElementById('layer-down'),
+      back: document.getElementById('layer-back')
+    };
+
+    // --- Initialization & Setup ---
+    function init() {
+      resizeCanvas();
+      window.addEventListener('resize', resizeCanvas);
+      setupEventListeners();
+      
+      // Default Demo Shapes
+      state.shapes.push({
+        type: 'Circle',
+        size: [60, 60],
+        pos: [200, 180],
+        angle: 0,
+        color: '#FF007F'
+      });
+      state.shapes.push({
+        type: 'Rectangle',
+        size: [120, 80],
+        pos: [420, 260],
+        angle: -15,
+        color: '#00FF88'
+      });
+
+      render();
+      updateLayerPanel();
+      updateCodeOutput();
+    }
+
+    function resizeCanvas() {
+      canvas.width = container.clientWidth;
+      canvas.height = container.clientHeight;
+      render();
+    }
+
+    // --- Event Listeners Setup ---
+    function setupEventListeners() {
+      // Sidebar Toggle
+      toggleSidebarBtn.addEventListener('click', () => {
+        sidebar.classList.toggle('collapsed');
+      });
+      closeSidebarBtn.addEventListener('click', () => {
+        sidebar.classList.add('collapsed');
+      });
+
+      // Code Panel Toggle
+      minimizeCodeBtn.addEventListener('click', () => {
+        codePanel.classList.toggle('h-44');
+        codePanel.classList.toggle('h-8');
+      });
+      document.getElementById('toggle-code-panel-btn').addEventListener('click', () => {
+        codePanel.classList.toggle('h-44');
+        codePanel.classList.toggle('h-8');
+      });
+
+      // Mode Switchers
+      document.getElementById('mode-draw').addEventListener('click', (e) => switchMode('draw', e.currentTarget));
+      document.getElementById('mode-select').addEventListener('click', (e) => switchMode('select', e.currentTarget));
+      document.getElementById('mode-recolor').addEventListener('click', (e) => switchMode('recolor', e.currentTarget));
+
+      // Shape Switchers
+      document.querySelectorAll('.shape-btn').forEach(btn => {
+        btn.addEventListener('click', (e) => {
+          document.querySelectorAll('.shape-btn').forEach(b => {
+            b.classList.remove('bg-indigo-600', 'text-white');
+            b.classList.add('bg-slate-800', 'text-slate-300');
+          });
+          const target = e.currentTarget;
+          target.classList.remove('bg-slate-800', 'text-slate-300');
+          target.classList.add('bg-indigo-600', 'text-white');
+
+          if (target.id === 'shape-circle') state.selectedShapeType = 'Circle';
+          if (target.id === 'shape-rectangle') state.selectedShapeType = 'Rectangle';
+          if (target.id === 'shape-square') state.selectedShapeType = 'Square';
+          if (target.id === 'shape-triangle') state.selectedShapeType = 'Triangle';
+        });
+      });
+
+      // Color Picker
+      colorPicker.addEventListener('input', (e) => {
+        state.currentColor = e.target.value;
+        colorHex.textContent = e.target.value.toUpperCase();
+        if (state.selectedIndex !== -1 && state.mode === 'select') {
+          state.shapes[state.selectedIndex].color = state.currentColor;
+          render();
+          updateLayerPanel();
+          updateCodeOutput();
+        }
+      });
+
+      // Preset Colors
+      document.querySelectorAll('.preset-color').forEach(btn => {
+        btn.addEventListener('click', (e) => {
+          const color = e.currentTarget.dataset.color;
+          state.currentColor = color;
+          colorPicker.value = color;
+          colorHex.textContent = color;
+          if (state.selectedIndex !== -1 && state.mode === 'select') {
+            state.shapes[state.selectedIndex].color = state.currentColor;
+            render();
+            updateLayerPanel();
+            updateCodeOutput();
+          }
+        });
+      });
+
+      // Layer Management Buttons
+      layerBtns.front.addEventListener('click', () => moveLayer('front'));
+      layerBtns.up.addEventListener('click', () => moveLayer('up'));
+      layerBtns.down.addEventListener('click', () => moveLayer('down'));
+      layerBtns.back.addEventListener('click', () => moveLayer('back'));
+
+      // FPS Input
+      fpsInput.addEventListener('change', (e) => {
+        let val = parseInt(e.target.value) || 60;
+        val = Math.max(1, Math.min(240, val));
+        state.fps = val;
+        e.target.value = val;
+        updateCodeOutput();
+      });
+
+      // Clear & Delete Buttons
+      document.getElementById('clear-btn').addEventListener('click', () => {
+        state.shapes = [];
+        state.selectedIndex = -1;
+        updateSelectionUI();
+        updateLayerPanel();
+        render();
+        updateCodeOutput();
+        showToast("畫布已清空");
+      });
+
+      deleteBtn.addEventListener('click', deleteSelectedShape);
+
+      // Copy Code
+      document.getElementById('copy-code-btn').addEventListener('click', copyCodeToClipboard);
+
+      // Canvas Mouse & Touch Events
+      canvas.addEventListener('mousedown', handlePointerDown);
+      canvas.addEventListener('mousemove', handlePointerMove);
+      window.addEventListener('mouseup', handlePointerUp);
+
+      canvas.addEventListener('touchstart', (e) => handlePointerDown(e.touches[0]));
+      canvas.addEventListener('touchmove', (e) => handlePointerMove(e.touches[0]));
+      window.addEventListener('touchend', handlePointerUp);
+
+      // Keyboard Shortcuts
+      window.addEventListener('keydown', (e) => {
+        if (e.key === 'Delete' || e.key === 'Backspace') {
+          if (document.activeElement.tagName !== 'INPUT') {
+            deleteSelectedShape();
+          }
+        }
+      });
+    }
+
+    function switchMode(newMode, btnEl) {
+      state.mode = newMode;
+      document.querySelectorAll('.mode-btn').forEach(b => {
+        b.classList.remove('border-indigo-500/50', 'bg-indigo-600/20', 'text-indigo-300');
+        b.classList.add('border-slate-800', 'bg-slate-800/40', 'text-slate-400');
+      });
+      btnEl.classList.remove('border-slate-800', 'bg-slate-800/40', 'text-slate-400');
+      btnEl.classList.add('border-indigo-500/50', 'bg-indigo-600/20', 'text-indigo-300');
+
+      if (newMode === 'draw') {
+        canvas.style.cursor = 'crosshair';
+        statusText.textContent = '模式：🖌️ 繪畫';
+      } else if (newMode === 'select') {
+        canvas.style.cursor = 'default';
+        statusText.textContent = '模式：↖️ 拖拽/調整';
+      } else if (newMode === 'recolor') {
+        canvas.style.cursor = 'pointer';
+        statusText.textContent = '模式：🖍️ 點擊調色';
+      }
+      render();
+    }
+
+    // --- Layer Operations ---
+    function moveLayer(action) {
+      const idx = state.selectedIndex;
+      if (idx === -1) return;
+
+      const total = state.shapes.length;
+      let newIdx = idx;
+
+      if (action === 'front' && idx < total - 1) {
+        const [item] = state.shapes.splice(idx, 1);
+        state.shapes.push(item);
+        newIdx = total - 1;
+      } else if (action === 'up' && idx < total - 1) {
+        const [item] = state.shapes.splice(idx, 1);
+        state.shapes.splice(idx + 1, 0, item);
+        newIdx = idx + 1;
+      } else if (action === 'down' && idx > 0) {
+        const [item] = state.shapes.splice(idx, 1);
+        state.shapes.splice(idx - 1, 0, item);
+        newIdx = idx - 1;
+      } else if (action === 'back' && idx > 0) {
+        const [item] = state.shapes.splice(idx, 1);
+        state.shapes.unshift(item);
+        newIdx = 0;
+      }
+
+      state.selectedIndex = newIdx;
+      updateSelectionUI();
+      updateLayerPanel();
+      render();
+      updateCodeOutput();
+    }
+
+    function updateLayerPanel() {
+      layerList.innerHTML = '';
+      if (state.shapes.length === 0) {
+        layerList.innerHTML = '<div class="text-slate-500 text-center py-2 italic text-[11px]">尚未加入圖層</div>';
+        return;
+      }
+
+      // Display in reverse order (top of list = top rendered shape)
+      for (let i = state.shapes.length - 1; i >= 0; i--) {
+        const s = state.shapes[i];
+        const isSelected = i === state.selectedIndex;
+
+        const item = document.createElement('div');
+        item.className = `layer-item flex items-center justify-between p-2 rounded-lg border border-slate-800 bg-slate-900/60 cursor-pointer transition ${isSelected ? 'selected' : 'hover:bg-slate-800/60'}`;
+        item.dataset.index = i;
+
+        item.innerHTML = `
+          <div class="flex items-center space-x-2 truncate">
+            <span class="w-3 h-3 rounded-full border border-white/20 shrink-0" style="background-color: ${s.color}"></span>
+            <span class="font-medium text-slate-200 truncate">#${i + 1} ${s.type}</span>
+          </div>
+          <span class="text-[10px] text-slate-500 font-mono">[${s.pos[0]}, ${s.pos[1]}]</span>
+        `;
+
+        item.addEventListener('click', () => {
+          state.selectedIndex = i;
+          updateSelectionUI();
+          updateLayerPanel();
+          render();
+        });
+
+        layerList.appendChild(item);
+      }
+    }
+
+    function deleteSelectedShape() {
+      if (state.selectedIndex !== -1) {
+        state.shapes.splice(state.selectedIndex, 1);
+        state.selectedIndex = -1;
+        updateSelectionUI();
+        updateLayerPanel();
+        render();
+        updateCodeOutput();
+        showToast("已刪除圖形");
+      }
+    }
+
+    // --- Core Canvas Logic ---
+    function getCanvasCoordinates(e) {
+      const rect = canvas.getBoundingClientRect();
+      return {
+        x: Math.round(e.clientX - rect.left),
+        y: Math.round(e.clientY - rect.top)
+      };
+    }
+
+    function handlePointerDown(e) {
+      const { x, y } = getCanvasCoordinates(e);
+
+      if (state.mode === 'draw') {
+        let defaultSize = [60, 60];
+        if (state.selectedShapeType === 'Rectangle') defaultSize = [100, 60];
+        if (state.selectedShapeType === 'Triangle') defaultSize = [80, 80];
+
+        const newShape = {
+          type: state.selectedShapeType,
+          size: defaultSize,
+          pos: [x, y],
+          angle: 0,
+          color: state.currentColor
+        };
+        state.shapes.push(newShape);
+        state.selectedIndex = state.shapes.length - 1;
+        updateSelectionUI();
+        updateLayerPanel();
+        render();
+        updateCodeOutput();
+      } 
+      else if (state.mode === 'recolor') {
+        const hitIndex = hitTestShapes(x, y);
+        if (hitIndex !== -1) {
+          state.shapes[hitIndex].color = state.currentColor;
+          render();
+          updateLayerPanel();
+          updateCodeOutput();
+          showToast("色彩已更新");
+        }
+      } 
+      else if (state.mode === 'select') {
+        if (state.selectedIndex !== -1) {
+          const selectedShape = state.shapes[state.selectedIndex];
+          // Check Rotate handle
+          if (hitTestRotateHandle(selectedShape, x, y)) {
+            state.isRotating = true;
+            state.initialShapeState = { ...selectedShape };
+            state.startAngle = Math.atan2(y - selectedShape.pos[1], x - selectedShape.pos[0]);
+            return;
+          }
+          // Check Resize handles
+          const handleIndex = hitTestResizeHandles(selectedShape, x, y);
+          if (handleIndex !== -1) {
+            state.isResizing = true;
+            state.resizeHandleIndex = handleIndex;
+            state.initialShapeState = { 
+              size: [...selectedShape.size], 
+              pos: [...selectedShape.pos] 
+            };
+            return;
+          }
+        }
+
+        // Select shape
+        const hitIndex = hitTestShapes(x, y);
+        if (hitIndex !== -1) {
+          state.selectedIndex = hitIndex;
+          state.isDragging = true;
+          state.dragOffsetX = x - state.shapes[hitIndex].pos[0];
+          state.dragOffsetY = y - state.shapes[hitIndex].pos[1];
+        } else {
+          state.selectedIndex = -1;
+        }
+        updateSelectionUI();
+        updateLayerPanel();
+        render();
+      }
+    }
+
+    function handlePointerMove(e) {
+      if (state.mode !== 'select' || state.selectedIndex === -1) return;
+
+      const { x, y } = getCanvasCoordinates(e);
+      const shape = state.shapes[state.selectedIndex];
+
+      if (state.isDragging) {
+        shape.pos = [x - state.dragOffsetX, y - state.dragOffsetY];
+        render();
+        updateSelectionUI();
+        updateLayerPanel();
+        updateCodeOutput();
+      } else if (state.isRotating) {
+        const currentAngle = Math.atan2(y - shape.pos[1], x - shape.pos[0]);
+        let angleDeg = Math.round(((currentAngle - state.startAngle) * 180) / Math.PI + state.initialShapeState.angle);
+        while (angleDeg > 180) angleDeg -= 360;
+        while (angleDeg < -180) angleDeg += 360;
+        shape.angle = angleDeg;
+        render();
+        updateSelectionUI();
+        updateCodeOutput();
+      } else if (state.isResizing) {
+        const dx = x - shape.pos[0];
+        const dy = y - shape.pos[1];
+        let newWidth = Math.max(10, Math.abs(dx) * 2);
+        let newHeight = Math.max(10, Math.abs(dy) * 2);
+
+        if (shape.type === 'Square' || shape.type === 'Circle') {
+          const maxDim = Math.max(newWidth, newHeight);
+          newWidth = maxDim;
+          newHeight = maxDim;
+        }
+
+        shape.size = [Math.round(newWidth), Math.round(newHeight)];
+        render();
+        updateSelectionUI();
+        updateCodeOutput();
+      }
+    }
+
+    function handlePointerUp() {
+      state.isDragging = false;
+      state.isRotating = false;
+      state.isResizing = false;
+    }
+
+    // --- Hit Testing ---
+    function hitTestShapes(x, y) {
+      for (let i = state.shapes.length - 1; i >= 0; i--) {
+        const s = state.shapes[i];
+        const rad = (-s.angle * Math.PI) / 180;
+        const dx = x - s.pos[0];
+        const dy = y - s.pos[1];
+        const localX = dx * Math.cos(rad) - dy * Math.sin(rad);
+        const localY = dx * Math.sin(rad) + dy * Math.cos(rad);
+
+        const halfW = s.size[0] / 2;
+        const halfH = s.size[1] / 2;
+
+        if (s.type === 'Circle') {
+          if ((localX * localX) / (halfW * halfW) + (localY * localY) / (halfH * halfH) <= 1) {
+            return i;
+          }
+        } else if (s.type === 'Triangle' || s.type === 'Rectangle' || s.type === 'Square') {
+          if (Math.abs(localX) <= halfW && Math.abs(localY) <= halfH) {
+            return i;
+          }
+        }
+      }
+      return -1;
+    }
+
+    function hitTestRotateHandle(shape, x, y) {
+      const handlePos = getRotateHandlePos(shape);
+      const dist = Math.hypot(x - handlePos.x, y - handlePos.y);
+      return dist <= 8;
+    }
+
+    function hitTestResizeHandles(shape, x, y) {
+      const handles = getResizeHandlesPos(shape);
+      for (let i = 0; i < handles.length; i++) {
+        const dist = Math.hypot(x - handles[i].x, y - handles[i].y);
+        if (dist <= 6) return i;
+      }
+      return -1;
+    }
+
+    function getRotateHandlePos(shape) {
+      const halfH = shape.size[1] / 2 + 25;
+      const rad = (shape.angle * Math.PI) / 180;
+      return {
+        x: shape.pos[0] + Math.sin(rad) * halfH,
+        y: shape.pos[1] - Math.cos(rad) * halfH
+      };
+    }
+
+    function getResizeHandlesPos(shape) {
+      const [w, h] = [shape.size[0] / 2, shape.size[1] / 2];
+      const rad = (shape.angle * Math.PI) / 180;
+      const corners = [
+        { x: -w, y: -h },
+        { x: w, y: -h },
+        { x: w, y: h },
+        { x: -w, y: h }
+      ];
+
+      return corners.map(c => ({
+        x: shape.pos[0] + (c.x * Math.cos(rad) - c.y * Math.sin(rad)),
+        y: shape.pos[1] + (c.x * Math.sin(rad) + c.y * Math.cos(rad))
+      }));
+    }
+
+    // --- Rendering Logic ---
+    function render() {
+      ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+      state.shapes.forEach((s, idx) => {
+        ctx.save();
+        ctx.translate(s.pos[0], s.pos[1]);
+        ctx.rotate((s.angle * Math.PI) / 180);
+        ctx.fillStyle = s.color;
+
+        const halfW = s.size[0] / 2;
+        const halfH = s.size[1] / 2;
+
+        ctx.beginPath();
+        if (s.type === 'Circle') {
+          ctx.ellipse(0, 0, halfW, halfH, 0, 0, Math.PI * 2);
+        } else if (s.type === 'Triangle') {
+          ctx.moveTo(0, -halfH);
+          ctx.lineTo(halfW, halfH);
+          ctx.lineTo(-halfW, halfH);
+          ctx.closePath();
+        } else {
+          ctx.rect(-halfW, -halfH, s.size[0], s.size[1]);
+        }
+        ctx.fill();
+        ctx.restore();
+
+        if (idx === state.selectedIndex && state.mode === 'select') {
+          drawTransformOverlay(s);
+        }
+      });
+    }
+
+    function drawTransformOverlay(s) {
+      ctx.save();
+      ctx.translate(s.pos[0], s.pos[1]);
+      ctx.rotate((s.angle * Math.PI) / 180);
+
+      const halfW = s.size[0] / 2;
+      const halfH = s.size[1] / 2;
+
+      ctx.strokeStyle = '#6366f1';
+      ctx.lineWidth = 1.5;
+      ctx.setLineDash([4, 4]);
+      ctx.strokeRect(-halfW, -halfH, s.size[0], s.size[1]);
+      ctx.setLineDash([]);
+
+      ctx.restore();
+
+      const handles = getResizeHandlesPos(s);
+      handles.forEach(h => {
+        ctx.beginPath();
+        ctx.arc(h.x, h.y, 5, 0, Math.PI * 2);
+        ctx.fillStyle = '#ffffff';
+        ctx.strokeStyle = '#6366f1';
+        ctx.lineWidth = 2;
+        ctx.fill();
+        ctx.stroke();
+      });
+
+      const rotPos = getRotateHandlePos(s);
+      ctx.beginPath();
+      ctx.moveTo(s.pos[0], s.pos[1]);
+      ctx.lineTo(rotPos.x, rotPos.y);
+      ctx.strokeStyle = '#6366f1';
+      ctx.lineWidth = 1;
+      ctx.stroke();
+
+      ctx.beginPath();
+      ctx.arc(rotPos.x, rotPos.y, 6, 0, Math.PI * 2);
+      ctx.fillStyle = '#818cf8';
+      ctx.strokeStyle = '#ffffff';
+      ctx.lineWidth = 1.5;
+      ctx.fill();
+      ctx.stroke();
+    }
+
+    // --- UI Synchronizer ---
+    function updateSelectionUI() {
+      const hasSelection = state.selectedIndex !== -1 && state.shapes[state.selectedIndex];
+      deleteBtn.disabled = !hasSelection;
+
+      // Enable/disable layer controls
+      Object.values(layerBtns).forEach(btn => btn.disabled = !hasSelection);
+
+      if (hasSelection) {
+        const s = state.shapes[state.selectedIndex];
+        selectionProperties.classList.remove('hidden');
+
+        document.getElementById('selected-type-tag').textContent = s.type;
+        document.getElementById('prop-size').textContent = `[${s.size[0]}, ${s.size[1]}]`;
+        document.getElementById('prop-pos').textContent = `[${s.pos[0]}, ${s.pos[1]}]`;
+        document.getElementById('prop-angle').textContent = `[${s.angle}]`;
+      } else {
+        selectionProperties.classList.add('hidden');
+      }
+    }
+
+    // --- Ze Code Generator ---
+    function updateCodeOutput() {
+      let code = `timeloop(${state.fps}) ; fps 限制 ${state.fps}\n\n`;
+
+      let lastColor = null;
+      state.shapes.forEach(s => {
+        if (s.color !== lastColor) {
+          code += `color("${s.color.toUpperCase()}")\n`;
+          lastColor = s.color;
+        }
+
+        const sizeStr = `[${s.size[0]}, ${s.size[1]}]`;
+        const posStr = `[${s.pos[0]}, ${s.pos[1]}]`;
+        const angleStr = `[${s.angle}]`;
+
+        code += `${s.type}(${sizeStr}, ${posStr}, ${angleStr})\n`;
+      });
+
+      codeOutput.textContent = code;
+    }
+
+    function copyCodeToClipboard() {
+      const codeText = codeOutput.textContent;
+      if (navigator.clipboard && navigator.clipboard.writeText) {
+        navigator.clipboard.writeText(codeText).then(() => {
+          showToast("Ze 程式碼已複製至剪貼簿！");
+        });
+      } else {
+        const textarea = document.createElement('textarea');
+        textarea.value = codeText;
+        document.body.appendChild(textarea);
+        textarea.select();
+        document.execCommand('copy');
+        document.body.removeChild(textarea);
+        showToast("Ze 程式碼已複製至剪貼簿！");
+      }
+    }
+
+    function showToast(msg) {
+      toastMsg.textContent = msg;
+      toast.classList.remove('opacity-0', 'pointer-events-none');
+      setTimeout(() => {
+        toast.classList.add('opacity-0', 'pointer-events-none');
+      }, 2000);
+    }
+
+    // Launch Engine
+    window.onload = init;
+  </script>
+</body>
+</html>
